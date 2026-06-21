@@ -1,0 +1,1334 @@
+openapi: 3.0.3
+info:
+  title: Library Book API
+  description: |
+    REST API for the Library Management System.
+    Covers full CRUD operations for Books, Authors, Genres, Publishers, Reviews,
+    and Book Editions, along with Arrival (stock-in) and Sale (stock-out) operations
+    with automatic price history tracking.
+
+    **Stack:** Spring Boot · Java · Lombok
+  version: 1.0.0
+  contact:
+    name: Library Dev Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Books
+    description: CRUD operations on Book
+  - name: Authors
+    description: CRUD operations on Author
+  - name: Genres
+    description: CRUD operations on Genre
+  - name: Publishers
+    description: CRUD operations on Publisher
+  - name: BookEditions
+    description: CRUD operations on Book Edition
+  - name: Reviews
+    description: CRUD operations on Review
+  - name: Stock
+    description: Stock query and manual adjustment
+  - name: Arrivals
+    description: Stock-in (increments quantityInStock and totalReceived)
+  - name: Sales
+    description: Stock-out (decrements quantityInStock and increments totalSold)
+
+paths:
+
+  /books:
+    get:
+      tags: [Books]
+      summary: List all books (paginated, filterable)
+      operationId: getAllBooks
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: language
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Language'
+        - name: genreId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: authorId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of books
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Books]
+      summary: Create a new book
+      operationId: createBook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookCreateRequest'
+      responses:
+        '201':
+          description: Book created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+
+    get:
+      tags: [Books]
+      summary: Get a book by ID
+      operationId: getBookById
+      responses:
+        '200':
+          description: Book found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Books]
+      summary: Replace a book entirely
+      operationId: updateBook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookUpdateRequest'
+      responses:
+        '200':
+          description: Book updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags: [Books]
+      summary: Partially update a book
+      operationId: patchBook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookPatchRequest'
+      responses:
+        '200':
+          description: Book patched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Books]
+      summary: Delete a book
+      operationId: deleteBook
+      responses:
+        '204':
+          description: Book deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/editions:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+
+    get:
+      tags: [BookEditions]
+      summary: List all editions of a book
+      operationId: getEditionsByBook
+      responses:
+        '200':
+          description: List of editions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookEditionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [BookEditions]
+      summary: Add an edition to a book
+      operationId: addEdition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookEditionCreateRequest'
+      responses:
+        '201':
+          description: Edition created (PriceHistory recorded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookEditionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/editions/{editionId}:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+      - $ref: '#/components/parameters/EditionIdPath'
+
+    put:
+      tags: [BookEditions]
+      summary: Update an edition (creates PriceHistory on price change)
+      operationId: updateEdition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookEditionCreateRequest'
+      responses:
+        '200':
+          description: Edition updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookEditionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [BookEditions]
+      summary: Delete an edition
+      operationId: deleteEdition
+      responses:
+        '204':
+          description: Edition deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/editions/{editionId}/stock:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+      - $ref: '#/components/parameters/EditionIdPath'
+
+    get:
+      tags: [Stock]
+      summary: Get stock for a specific edition
+      operationId: getEditionStock
+      responses:
+        '200':
+          description: Stock info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags: [Stock]
+      summary: Manually set stock quantity for an edition
+      operationId: updateEditionStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: integer
+      responses:
+        '200':
+          description: Stock updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/stock:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+
+    get:
+      tags: [Stock]
+      summary: Get total stock across all editions of a book
+      operationId: getTotalBookStock
+      responses:
+        '200':
+          description: Total quantity in stock
+          content:
+            application/json:
+              schema:
+                type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+
+    get:
+      tags: [Reviews]
+      summary: List all reviews for a book
+      operationId: getReviewsByBook
+      responses:
+        '200':
+          description: List of reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReviewResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Reviews]
+      summary: Add a review to a book
+      operationId: addReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewCreateRequest'
+      responses:
+        '201':
+          description: Review created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /books/{bookId}/reviews/{reviewId}:
+    parameters:
+      - $ref: '#/components/parameters/BookIdPath'
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Review UUID
+
+    delete:
+      tags: [Reviews]
+      summary: Delete a review
+      operationId: deleteReview
+      responses:
+        '204':
+          description: Review deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /authors:
+    get:
+      tags: [Authors]
+      summary: List all authors (paginated, searchable)
+      operationId: getAllAuthors
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search by first or last name
+      responses:
+        '200':
+          description: Paginated list of authors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorPage'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Authors]
+      summary: Create a new author
+      operationId: createAuthor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorCreateRequest'
+      responses:
+        '201':
+          description: Author created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /authors/{authorId}:
+    parameters:
+      - name: authorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Author UUID
+
+    get:
+      tags: [Authors]
+      summary: Get an author by ID
+      operationId: getAuthorById
+      responses:
+        '200':
+          description: Author found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags: [Authors]
+      summary: Update an author
+      operationId: updateAuthor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorUpdateRequest'
+      responses:
+        '200':
+          description: Author updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Authors]
+      summary: Delete an author
+      operationId: deleteAuthor
+      responses:
+        '204':
+          description: Author deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /genres:
+    get:
+      tags: [Genres]
+      summary: List all genres
+      operationId: getAllGenres
+      responses:
+        '200':
+          description: List of genres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GenreResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Genres]
+      summary: Create a new genre
+      operationId: createGenre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenreCreateRequest'
+      responses:
+        '201':
+          description: Genre created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenreResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /genres/{genreId}:
+    parameters:
+      - name: genreId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Genre UUID
+
+    get:
+      tags: [Genres]
+      summary: Get a genre by ID
+      operationId: getGenreById
+      responses:
+        '200':
+          description: Genre found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenreResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Genres]
+      summary: Delete a genre
+      operationId: deleteGenre
+      responses:
+        '204':
+          description: Genre deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /publishers:
+    get:
+      tags: [Publishers]
+      summary: List all publishers
+      operationId: getAllPublishers
+      responses:
+        '200':
+          description: List of publishers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublisherResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Publishers]
+      summary: Create a new publisher
+      operationId: createPublisher
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublisherCreateRequest'
+      responses:
+        '201':
+          description: Publisher created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /publishers/{publisherId}:
+    parameters:
+      - name: publisherId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Publisher UUID
+
+    get:
+      tags: [Publishers]
+      summary: Get a publisher by ID
+      operationId: getPublisherById
+      responses:
+        '200':
+          description: Publisher found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublisherResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags: [Publishers]
+      summary: Delete a publisher
+      operationId: deletePublisher
+      responses:
+        '204':
+          description: Publisher deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /arrivals:
+    post:
+      tags: [Arrivals]
+      summary: Create an arrival (stock-in)
+      operationId: createArrival
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArrivalRequest'
+      responses:
+        '201':
+          description: Arrival recorded, stock incremented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArrivalResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sales:
+    post:
+      tags: [Sales]
+      summary: Create a sale (stock-out)
+      operationId: createSale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleRequest'
+      responses:
+        '201':
+          description: Sale recorded, stock decremented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+
+  parameters:
+    BookIdPath:
+      name: bookId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Book UUID
+
+    EditionIdPath:
+      name: editionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Edition UUID
+
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+      description: Zero-based page index
+
+    SizeParam:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      description: Number of items per page
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    Conflict:
+      description: Resource already exists or stock insufficient
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+    InternalServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    Language:
+      type: string
+      enum: [FR, EN, MG, ES, DE, AR, ZH]
+
+    BookFormat:
+      type: string
+      enum: [HARDCOVER, PAPERBACK, POCKET, DIGITAL]
+
+    BookCondition:
+      type: string
+      enum: [NEW, USED_GOOD, USED_FAIR]
+
+    PaymentMethod:
+      type: string
+      enum: [CASH, MOBILE_MONEY, CARD, TRANSFER]
+
+    SaleStatus:
+      type: string
+      enum: [PENDING, CONFIRMED, CANCELLED]
+
+    AuthorSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        firstName:
+          type: string
+        lastName:
+          type: string
+
+    AuthorCreateRequest:
+      type: object
+      required: [firstName, lastName]
+      properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        bio:
+          type: string
+          maxLength: 2000
+
+    AuthorUpdateRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        bio:
+          type: string
+          maxLength: 2000
+
+    AuthorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        firstName:
+          type: string
+        lastName:
+          type: string
+        bio:
+          type: string
+
+    AuthorPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorResponse'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer
+
+    GenreSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+
+    GenreCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+
+    GenreResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+
+    PublisherSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        country:
+          type: string
+
+    PublisherCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        country:
+          type: string
+          maxLength: 100
+
+    PublisherResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+        country:
+          type: string
+
+    BookEditionCreateRequest:
+      type: object
+      required: [sellingPrice]
+      properties:
+        isbn:
+          type: string
+          maxLength: 20
+        format:
+          $ref: '#/components/schemas/BookFormat'
+        sellingPrice:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        publishedDate:
+          type: string
+          format: date
+        coverImageUrl:
+          type: string
+          format: uri
+          maxLength: 500
+        condition:
+          $ref: '#/components/schemas/BookCondition'
+        quantityInStock:
+          type: integer
+        publisherId:
+          type: string
+          format: uuid
+
+    BookEditionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        isbn:
+          type: string
+        format:
+          $ref: '#/components/schemas/BookFormat'
+        sellingPrice:
+          type: number
+          format: double
+        publishedDate:
+          type: string
+          format: date
+        coverImageUrl:
+          type: string
+          format: uri
+        condition:
+          $ref: '#/components/schemas/BookCondition'
+        quantityInStock:
+          type: integer
+        totalReceived:
+          type: integer
+          readOnly: true
+        totalSold:
+          type: integer
+          readOnly: true
+        publisher:
+          $ref: '#/components/schemas/PublisherSummary'
+
+    ReviewCreateRequest:
+      type: object
+      required: [rating, userId]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          maxLength: 2000
+        userId:
+          type: string
+          format: uuid
+
+    ReviewResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        rating:
+          type: integer
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        userId:
+          type: string
+          format: uuid
+          readOnly: true
+
+    StockResponse:
+      type: object
+      properties:
+        editionId:
+          type: string
+          format: uuid
+        isbn:
+          type: string
+        quantityInStock:
+          type: integer
+
+    ArrivalItemRequest:
+      type: object
+      required: [editionId, quantity, unitCost]
+      properties:
+        editionId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          exclusiveMinimum: 0
+        unitCost:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        condition:
+          $ref: '#/components/schemas/BookCondition'
+
+    ArrivalRequest:
+      type: object
+      required: [arrivalDate, items]
+      properties:
+        arrivalDate:
+          type: string
+          format: date
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ArrivalItemRequest'
+
+    ArrivalItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: integer
+        unitCost:
+          type: number
+          format: double
+        lineTotal:
+          type: number
+          format: double
+          readOnly: true
+        condition:
+          $ref: '#/components/schemas/BookCondition'
+        editionId:
+          type: string
+          format: uuid
+        editionIsbn:
+          type: string
+
+    ArrivalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        arrivalDate:
+          type: string
+          format: date
+        notes:
+          type: string
+        totalCost:
+          type: number
+          format: double
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArrivalItemResponse'
+
+    SaleItemRequest:
+      type: object
+      required: [editionId, quantity]
+      properties:
+        editionId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          exclusiveMinimum: 0
+
+    SaleRequest:
+      type: object
+      required: [userId, paymentMethod, items]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SaleItemRequest'
+
+    SaleItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+          format: double
+          readOnly: true
+        lineTotal:
+          type: number
+          format: double
+          readOnly: true
+        editionId:
+          type: string
+          format: uuid
+        editionIsbn:
+          type: string
+
+    SaleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        saleDate:
+          type: string
+          format: date-time
+          readOnly: true
+        totalAmount:
+          type: number
+          format: double
+        paymentMethod:
+          $ref: '#/components/schemas/PaymentMethod'
+        status:
+          $ref: '#/components/schemas/SaleStatus'
+        userId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleItemResponse'
+
+    BookResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+        description:
+          type: string
+        language:
+          $ref: '#/components/schemas/Language'
+        authors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorSummary'
+        genres:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenreSummary'
+        editions:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookEditionResponse'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewResponse'
+
+    BookPage:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookResponse'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer
+
+    BookCreateRequest:
+      type: object
+      required: [title, language, authorIds]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        language:
+          $ref: '#/components/schemas/Language'
+        authorIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        genreIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    BookUpdateRequest:
+      type: object
+      required: [title, language, authorIds]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        language:
+          $ref: '#/components/schemas/Language'
+        authorIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        genreIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    BookPatchRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        language:
+          $ref: '#/components/schemas/Language'
+        authorIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        genreIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ApiError:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+        path:
+          type: string
